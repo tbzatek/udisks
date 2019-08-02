@@ -1284,6 +1284,7 @@ is_system_managed (UDisksDaemon *daemon,
 
 static void trigger_mpoint_cleanup (const gchar *mount_point)
 {
+#ifdef HAVE_LIBSYSTEMD_LOGIN
   const gchar *service_argv[] = {"systemctl", "start", NULL, NULL};
   const gchar *escape_argv[] = {"systemd-escape", NULL, NULL};
   GError *error = NULL;
@@ -1339,6 +1340,7 @@ out:
   g_free (escaped_mpoint);
   g_free ((gchar *) service_argv[2]);
   g_free ((gchar *) escape_argv[1]);
+#endif
 }
 
 /* ---------------------------------------------------------------------------------------------------- */
