@@ -103,7 +103,6 @@ static guint signals[LAST_SIGNAL] = { 0 };
 G_DEFINE_TYPE (UDisksMountMonitor, udisks_mount_monitor, G_TYPE_OBJECT)
 
 static void udisks_mount_monitor_ensure (UDisksMountMonitor *monitor);
-static void udisks_mount_monitor_invalidate (UDisksMountMonitor *monitor);
 static void udisks_mount_monitor_constructed (GObject *object);
 
 static void
@@ -385,7 +384,14 @@ udisks_mount_monitor_new (void)
   return UDISKS_MOUNT_MONITOR (g_object_new (UDISKS_TYPE_MOUNT_MONITOR, NULL));
 }
 
-static void
+/**
+ * udisks_mount_monitor_invalidate:
+ * @monitor: A #UDisksMountMonitor.
+ *
+ * Marks cached data as invalid. Use in case you know there has been a change
+ * to force cache refresh.
+ */
+void
 udisks_mount_monitor_invalidate (UDisksMountMonitor *monitor)
 {
   g_mutex_lock (&monitor->mounts_mutex);
