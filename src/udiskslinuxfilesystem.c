@@ -1353,6 +1353,7 @@ handle_mount (UDisksFilesystem      *filesystem,
   UDisksBlock *block;
   UDisksDaemon *daemon;
   UDisksState *state;
+  UDisksMountMonitor *mount_monitor;
   uid_t caller_uid;
   gid_t caller_gid;
   const gchar * const *existing_mount_points;
@@ -1386,6 +1387,7 @@ handle_mount (UDisksFilesystem      *filesystem,
   daemon = udisks_linux_block_object_get_daemon (UDISKS_LINUX_BLOCK_OBJECT (object));
   state = udisks_daemon_get_state (daemon);
   device = udisks_block_dup_device (block);
+  mount_monitor = udisks_daemon_get_mount_monitor (daemon);
 
   /* check if mount point is managed by e.g. /etc/fstab or similar */
   if (is_system_managed (daemon, block, &mount_point_to_use, &fstab_mount_options))
@@ -1553,6 +1555,7 @@ handle_mount (UDisksFilesystem      *filesystem,
                      device,
                      mount_point_to_use,
                      caller_uid);
+      udisks_mount_monitor_invalidate (mount_monitor);
 
       /* update the mounted-fs file */
       udisks_state_add_mounted_fs (state,
@@ -1703,6 +1706,7 @@ handle_mount (UDisksFilesystem      *filesystem,
     trigger_mpoint_cleanup (mount_point_to_use);
 
   /* update the mounted-fs file */
+  udisks_mount_monitor_invalidate (mount_monitor);
   udisks_state_add_mounted_fs (state,
                                mount_point_to_use,
                                udisks_block_get_device_number (block),
@@ -1800,6 +1804,7 @@ handle_unmount (UDisksFilesystem      *filesystem,
   gboolean success;
   UDisksBaseJob *job = NULL;
   UDisksObject *filesystem_object = NULL;
+  UDisksMountMonitor *mount_monitor;
   WaitForFilesystemMountPointsData wait_data = {NULL, 0, NULL};
 
   /* only allow a single call at a time */
@@ -1815,6 +1820,7 @@ handle_unmount (UDisksFilesystem      *filesystem,
   block = udisks_object_peek_block (object);
   daemon = udisks_linux_block_object_get_daemon (UDISKS_LINUX_BLOCK_OBJECT (object));
   state = udisks_daemon_get_state (daemon);
+  mount_monitor = udisks_daemon_get_mount_monitor (daemon);
 
   if (options != NULL)
     {
@@ -1929,6 +1935,7 @@ handle_unmount (UDisksFilesystem      *filesystem,
                      udisks_block_get_device (block),
                      mount_point,
                      caller_uid);
+      udisks_mount_monitor_invalidate (mount_monitor);
       goto waiting;
     }
 
@@ -1990,6 +1997,7 @@ handle_unmount (UDisksFilesystem      *filesystem,
     udisks_simple_job_complete (UDISKS_SIMPLE_JOB (job), TRUE, NULL);
 
   /* filesystem unmounted, run the state/cleanup routines now to remove the mountpoint (if applicable) */
+  udisks_mount_monitor_invalidate (mount_monitor);
   udisks_state_check_sync (state);
 
   udisks_notice ("Unmounted %s on behalf of uid %u",
