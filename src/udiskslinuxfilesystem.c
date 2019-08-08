@@ -1556,6 +1556,7 @@ handle_mount (UDisksFilesystem      *filesystem,
                      mount_point_to_use,
                      caller_uid);
       udisks_mount_monitor_invalidate (mount_monitor);
+      udisks_linux_filesystem_update (UDISKS_LINUX_FILESYSTEM (filesystem), UDISKS_LINUX_BLOCK_OBJECT (object));
 
       /* update the mounted-fs file */
       udisks_state_add_mounted_fs (state,
@@ -1707,6 +1708,7 @@ handle_mount (UDisksFilesystem      *filesystem,
 
   /* update the mounted-fs file */
   udisks_mount_monitor_invalidate (mount_monitor);
+  udisks_linux_filesystem_update (UDISKS_LINUX_FILESYSTEM (filesystem), UDISKS_LINUX_BLOCK_OBJECT (object));
   udisks_state_add_mounted_fs (state,
                                mount_point_to_use,
                                udisks_block_get_device_number (block),
