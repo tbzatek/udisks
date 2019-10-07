@@ -1913,7 +1913,7 @@ handle_unmount (UDisksFilesystem      *filesystem,
                                          0,
                                          NULL);
 
-  if (!bd_fs_unmount (mount_point ? mount_point : udisks_block_get_device (block),
+  if (!bd_fs_unmount (udisks_block_get_device (block),
                       opt_force, FALSE, NULL, &error))
     {
       g_dbus_method_invocation_return_error (invocation,
