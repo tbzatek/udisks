@@ -392,6 +392,18 @@ class UdisksTestCase(unittest.TestCase):
         return False
 
     @classmethod
+    def try_unmount(self, path):
+        """Handle unmount and retry if busy"""
+        for _ in range(10):
+            ret, out = self.run_command('umount %s' % path)
+            if ret == 0 or "not mounted" in out:
+                return
+            if "target is busy" not in out:
+                break
+            time.sleep(0.5)
+        self.fail('Failed to unmount %s: %s' % (path, out))
+
+    @classmethod
     def read_file(self, filename):
         with open(filename, 'r') as f:
             content = f.read()
