@@ -1293,7 +1293,7 @@ handle_mount (UDisksFilesystem      *filesystem,
   UDisksObject *object = NULL;
   UDisksBlock *block;
   UDisksDaemon *daemon;
-  UDisksState *state;
+  UDisksState *state = NULL;
   uid_t caller_uid;
   gid_t caller_gid;
   const gchar * const *existing_mount_points;
@@ -1327,6 +1327,10 @@ handle_mount (UDisksFilesystem      *filesystem,
   daemon = udisks_linux_block_object_get_daemon (UDISKS_LINUX_BLOCK_OBJECT (object));
   state = udisks_daemon_get_state (daemon);
   device = udisks_block_dup_device (block);
+
+  /* perform state cleanup to avoid duplicate entries for this block device */
+  udisks_linux_block_object_lock_for_cleanup (UDISKS_LINUX_BLOCK_OBJECT (object));
+  udisks_state_check_block (state, udisks_linux_block_object_get_device_number (UDISKS_LINUX_BLOCK_OBJECT (object)));
 
   /* check if mount point is managed by e.g. /etc/fstab or similar */
   if (is_system_managed (daemon, block, &mount_point_to_use, &fstab_mount_options))
@@ -1657,6 +1661,10 @@ handle_mount (UDisksFilesystem      *filesystem,
   udisks_filesystem_complete_mount (filesystem, invocation, mount_point_to_use);
 
  out:
+  if (object != NULL)
+    udisks_linux_block_object_release_cleanup_lock (UDISKS_LINUX_BLOCK_OBJECT (object));
+  if (state != NULL)
+    udisks_state_check (state);
   g_free (fs_type_to_use);
   g_free (mount_options_to_use);
   g_free (mount_point_to_use);
@@ -1727,7 +1735,7 @@ handle_unmount (UDisksFilesystem      *filesystem,
   UDisksObject *object;
   UDisksBlock *block;
   UDisksDaemon *daemon;
-  UDisksState *state;
+  UDisksState *state = NULL;
   gchar *mount_point = NULL;
   gchar *fstab_mount_options = NULL;
   GError *error = NULL;
@@ -1755,6 +1763,10 @@ handle_unmount (UDisksFilesystem      *filesystem,
   block = udisks_object_peek_block (object);
   daemon = udisks_linux_block_object_get_daemon (UDISKS_LINUX_BLOCK_OBJECT (object));
   state = udisks_daemon_get_state (daemon);
+
+  udisks_linux_block_object_lock_for_cleanup (UDISKS_LINUX_BLOCK_OBJECT (object));
+  /* trigger state cleanup so that we match actual mountpoint */
+  udisks_state_check_block (state, udisks_linux_block_object_get_device_number (UDISKS_LINUX_BLOCK_OBJECT (object)));
 
   if (options != NULL)
     {
@@ -1930,7 +1942,7 @@ handle_unmount (UDisksFilesystem      *filesystem,
     udisks_simple_job_complete (UDISKS_SIMPLE_JOB (job), TRUE, NULL);
 
   /* filesystem unmounted, run the state/cleanup routines now to remove the mountpoint (if applicable) */
-  udisks_state_check_sync (state);
+  udisks_state_check_block (state, udisks_linux_block_object_get_device_number (UDISKS_LINUX_BLOCK_OBJECT (object)));
 
   udisks_notice ("Unmounted %s on behalf of uid %u",
                  udisks_block_get_device (block),
@@ -1949,6 +1961,10 @@ handle_unmount (UDisksFilesystem      *filesystem,
   udisks_filesystem_complete_unmount (filesystem, invocation);
 
  out:
+  if (object != NULL)
+    udisks_linux_block_object_release_cleanup_lock (UDISKS_LINUX_BLOCK_OBJECT (object));
+  if (state != NULL)
+    udisks_state_check (state);
   g_free (wait_data.mount_point);
   g_free (mount_point);
   g_free (fstab_mount_options);
@@ -1972,6 +1988,7 @@ handle_set_label (UDisksFilesystem      *filesystem,
   UDisksBlock *block;
   UDisksObject *object;
   UDisksDaemon *daemon;
+  UDisksState *state = NULL;
   const gchar *probed_fs_usage;
   const gchar *probed_fs_type;
   const FSInfo *fs_info;
@@ -1998,7 +2015,11 @@ handle_set_label (UDisksFilesystem      *filesystem,
     }
 
   daemon = udisks_linux_block_object_get_daemon (UDISKS_LINUX_BLOCK_OBJECT (object));
+  state = udisks_daemon_get_state (daemon);
   block = udisks_object_peek_block (object);
+
+  udisks_linux_block_object_lock_for_cleanup (UDISKS_LINUX_BLOCK_OBJECT (object));
+  udisks_state_check_block (state, udisks_linux_block_object_get_device_number (UDISKS_LINUX_BLOCK_OBJECT (object)));
 
   if (!udisks_daemon_util_get_caller_uid_sync (daemon,
                                                invocation,
@@ -2152,6 +2173,10 @@ handle_set_label (UDisksFilesystem      *filesystem,
                                            out_message);
 
  out:
+  if (object != NULL)
+    udisks_linux_block_object_release_cleanup_lock (UDISKS_LINUX_BLOCK_OBJECT (object));
+  if (state != NULL)
+    udisks_state_check (state);
   /* for some FSes we need to copy and modify label; free our copy */
   g_free (real_label);
   g_free (command);
@@ -2172,6 +2197,7 @@ handle_resize (UDisksFilesystem      *filesystem,
   UDisksBlock *block = NULL;
   UDisksObject *object = NULL;
   UDisksDaemon *daemon = NULL;
+  UDisksState *state = NULL;
   const gchar *probed_fs_usage = NULL;
   const gchar *probed_fs_type = NULL;
   BDFsResizeFlags mode = 0;
@@ -2193,7 +2219,11 @@ handle_resize (UDisksFilesystem      *filesystem,
     }
 
   daemon = udisks_linux_block_object_get_daemon (UDISKS_LINUX_BLOCK_OBJECT (object));
+  state = udisks_daemon_get_state (daemon);
   block = udisks_object_peek_block (object);
+
+  udisks_linux_block_object_lock_for_cleanup (UDISKS_LINUX_BLOCK_OBJECT (object));
+  udisks_state_check_block (state, udisks_linux_block_object_get_device_number (UDISKS_LINUX_BLOCK_OBJECT (object)));
 
   if (! udisks_daemon_util_get_caller_uid_sync (daemon,
                                                 invocation,
@@ -2325,6 +2355,10 @@ handle_resize (UDisksFilesystem      *filesystem,
 
  out:
   udisks_bd_thread_disable_progress ();
+  if (object != NULL)
+    udisks_linux_block_object_release_cleanup_lock (UDISKS_LINUX_BLOCK_OBJECT (object));
+  if (state != NULL)
+    udisks_state_check (state);
   g_clear_object (&object);
   g_free (required_utility);
   g_clear_error (&error);
@@ -2343,6 +2377,7 @@ handle_repair (UDisksFilesystem      *filesystem,
   UDisksBlock *block = NULL;
   UDisksObject *object = NULL;
   UDisksDaemon *daemon = NULL;
+  UDisksState *state = NULL;
   const gchar *probed_fs_usage = NULL;
   const gchar *probed_fs_type = NULL;
   const gchar *action_id = NULL;
@@ -2364,7 +2399,11 @@ handle_repair (UDisksFilesystem      *filesystem,
     }
 
   daemon = udisks_linux_block_object_get_daemon (UDISKS_LINUX_BLOCK_OBJECT (object));
+  state = udisks_daemon_get_state (daemon);
   block = udisks_object_peek_block (object);
+
+  udisks_linux_block_object_lock_for_cleanup (UDISKS_LINUX_BLOCK_OBJECT (object));
+  udisks_state_check_block (state, udisks_linux_block_object_get_device_number (UDISKS_LINUX_BLOCK_OBJECT (object)));
 
   if (! udisks_daemon_util_get_caller_uid_sync (daemon,
                                                 invocation,
@@ -2482,6 +2521,10 @@ handle_repair (UDisksFilesystem      *filesystem,
 
  out:
   udisks_bd_thread_disable_progress ();
+  if (object != NULL)
+    udisks_linux_block_object_release_cleanup_lock (UDISKS_LINUX_BLOCK_OBJECT (object));
+  if (state != NULL)
+    udisks_state_check (state);
   g_clear_object (&object);
   g_free (required_utility);
   g_clear_error (&error);
@@ -2500,6 +2543,7 @@ handle_check (UDisksFilesystem      *filesystem,
   UDisksBlock *block = NULL;
   UDisksObject *object = NULL;
   UDisksDaemon *daemon = NULL;
+  UDisksState *state = NULL;
   const gchar *probed_fs_usage = NULL;
   const gchar *probed_fs_type = NULL;
   const gchar *action_id = NULL;
@@ -2521,7 +2565,11 @@ handle_check (UDisksFilesystem      *filesystem,
     }
 
   daemon = udisks_linux_block_object_get_daemon (UDISKS_LINUX_BLOCK_OBJECT (object));
+  state = udisks_daemon_get_state (daemon);
   block = udisks_object_peek_block (object);
+
+  udisks_linux_block_object_lock_for_cleanup (UDISKS_LINUX_BLOCK_OBJECT (object));
+  udisks_state_check_block (state, udisks_linux_block_object_get_device_number (UDISKS_LINUX_BLOCK_OBJECT (object)));
 
   if (! udisks_daemon_util_get_caller_uid_sync (daemon,
                                                 invocation,
@@ -2639,6 +2687,10 @@ handle_check (UDisksFilesystem      *filesystem,
 
  out:
   udisks_bd_thread_disable_progress ();
+  if (object != NULL)
+    udisks_linux_block_object_release_cleanup_lock (UDISKS_LINUX_BLOCK_OBJECT (object));
+  if (state != NULL)
+    udisks_state_check (state);
   g_clear_object (&object);
   g_free (required_utility);
   g_clear_error (&error);
@@ -2654,6 +2706,7 @@ handle_take_ownership (UDisksFilesystem      *filesystem,
   UDisksBlock *block = NULL;
   UDisksObject *object = NULL;
   UDisksDaemon *daemon = NULL;
+  UDisksState *state = NULL;
   const gchar *probed_fs_usage = NULL;
   const gchar *probed_fs_type = NULL;
   const gchar *action_id = NULL;
@@ -2679,6 +2732,10 @@ handle_take_ownership (UDisksFilesystem      *filesystem,
 
   block = udisks_object_peek_block (object);
   daemon = udisks_linux_block_object_get_daemon (UDISKS_LINUX_BLOCK_OBJECT (object));
+  state = udisks_daemon_get_state (daemon);
+
+  udisks_linux_block_object_lock_for_cleanup (UDISKS_LINUX_BLOCK_OBJECT (object));
+  udisks_state_check_block (state, udisks_linux_block_object_get_device_number (UDISKS_LINUX_BLOCK_OBJECT (object)));
 
   if (! udisks_daemon_util_get_caller_uid_sync (daemon,
                                                 invocation,
@@ -2771,6 +2828,10 @@ handle_take_ownership (UDisksFilesystem      *filesystem,
   udisks_simple_job_complete (UDISKS_SIMPLE_JOB (job), TRUE, NULL);
 
   out:
+   if (object != NULL)
+     udisks_linux_block_object_release_cleanup_lock (UDISKS_LINUX_BLOCK_OBJECT (object));
+   if (state != NULL)
+     udisks_state_check (state);
    g_clear_object (&object);
    g_clear_error (&error);
    g_mutex_unlock (&UDISKS_LINUX_FILESYSTEM (filesystem)->lock);
