@@ -466,7 +466,7 @@ btrfs_subvolume_perform_action (UDisksFilesystemBTRFS *fs_btrfs,
   g_list_free_full (siblings, g_object_unref);
 
   /* Complete DBus call. */
-  udisks_filesystem_btrfs_complete_set_label (fs_btrfs, invocation);
+  g_dbus_method_invocation_return_value (invocation, g_variant_new ("()"));
 
 out:
   /* Release the resources */
@@ -574,7 +574,7 @@ btrfs_device_perform_action (UDisksFilesystemBTRFS *fs_btrfs,
   g_list_free_full (siblings, g_object_unref);
 
   /* Complete DBus call. */
-  udisks_filesystem_btrfs_complete_add_device (fs_btrfs, invocation);
+  g_dbus_method_invocation_return_value (invocation, g_variant_new ("()"));
 
 out:
   /* Release the resources */
