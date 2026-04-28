@@ -928,42 +928,55 @@ handle_mount_fstab (UDisksDaemon          *daemon,
   block = udisks_object_peek_block (object);
   device = udisks_block_get_device (block);
 
+  if (mount_other_user)
+    {
+      /* Always require authorization when mounting on behalf of another user,
+       * regardless of fstab mount options. */
+      if (!udisks_daemon_util_check_authorization_sync (daemon,
+                                                        object,
+                                                        "org.freedesktop.udisks2.filesystem-mount-other-user",
+                                                        options,
+                                                        N_("Authentication is required to mount $(device.name)"),
+                                                        invocation))
+        return FALSE;
+    }
+
   if (!has_option (fstab_mount_options, "x-udisks-auth") &&
       !has_option (fstab_mount_options, "user") &&
       !has_option (fstab_mount_options, "users"))
     {
       mount_fstab_as_root = TRUE;
-      action_id = "org.freedesktop.udisks2.filesystem-mount";
-      /* Translators: Shown in authentication dialog when the user
-       * requests mounting a filesystem.
-       *
-       * Do not translate $(device.name), it's a placeholder and
-       * will be replaced by the name of the drive/device in question
-       */
-      message = N_("Authentication is required to mount $(device.name)");
-      if (mount_other_user)
-        {
-          action_id = "org.freedesktop.udisks2.filesystem-mount-other-user";
-        }
-      else if (!udisks_daemon_util_setup_by_user (daemon, object, caller_uid))
-        {
-          if (udisks_block_get_hint_system (block))
-            {
-              action_id = "org.freedesktop.udisks2.filesystem-mount-system";
-            }
-          else if (!udisks_daemon_util_on_user_seat (daemon, object, caller_uid))
-            {
-              action_id = "org.freedesktop.udisks2.filesystem-mount-other-seat";
-            }
-        }
 
-      if (!udisks_daemon_util_check_authorization_sync (daemon,
-                                                        object,
-                                                        action_id,
-                                                        options,
-                                                        message,
-                                                        invocation))
-        return FALSE;
+      if (!mount_other_user)
+        {
+          action_id = "org.freedesktop.udisks2.filesystem-mount";
+          /* Translators: Shown in authentication dialog when the user
+           * requests mounting a filesystem.
+           *
+           * Do not translate $(device.name), it's a placeholder and
+           * will be replaced by the name of the drive/device in question
+           */
+          message = N_("Authentication is required to mount $(device.name)");
+          if (!udisks_daemon_util_setup_by_user (daemon, object, caller_uid))
+            {
+              if (udisks_block_get_hint_system (block))
+                {
+                  action_id = "org.freedesktop.udisks2.filesystem-mount-system";
+                }
+              else if (!udisks_daemon_util_on_user_seat (daemon, object, caller_uid))
+                {
+                  action_id = "org.freedesktop.udisks2.filesystem-mount-other-seat";
+                }
+            }
+
+          if (!udisks_daemon_util_check_authorization_sync (daemon,
+                                                            object,
+                                                            action_id,
+                                                            options,
+                                                            message,
+                                                            invocation))
+            return FALSE;
+        }
     }
 
 
@@ -1274,7 +1287,7 @@ handle_mount (UDisksFilesystem      *filesystem,
   UDisksBlock *block;
   UDisksDaemon *daemon;
   UDisksState *state = NULL;
-  gchar *opt_as_user = NULL;
+  const gchar *opt_as_user = NULL;
   uid_t caller_uid;
   gid_t caller_gid;
   uid_t effective_uid = 0;
@@ -1368,6 +1381,14 @@ handle_mount (UDisksFilesystem      *filesystem,
           g_clear_error (&error);
           goto out;
         }
+
+      /* as-user targeting the caller's own uid is a no-op */
+      if (effective_uid == caller_uid)
+        opt_as_user = NULL;
+    }
+
+  if (opt_as_user)
+    {
       effective_user_name = g_strdup (opt_as_user);
     }
   else
